@@ -89,8 +89,8 @@ class HierarchicalActorCritic():
                 if self.render:      
                     if self.num_levels == 2:
                         env.unwrapped.render_subgoals(self.subgoals[0], self.subgoals[1])
-                    # for _ in range(1000000):
-                    #     continue
+                    if self.num_levels == 3:
+                        env.unwrapped.render_subgoals(self.subgoals[0], self.subgoals[1], self.subgoals[2])
 
             # when the level_i is not bottom layer and proposed subgoal action_i is not achieved by level i-1
             if level_i > 0 and not self.is_goal(next_state_i, action_i):
@@ -123,7 +123,6 @@ class HierarchicalActorCritic():
                 HER_storage[i][2] == 0.0
                 HER_storage[i][5] == 0.0
             HER_storage[i][4] = next_state_i
-            # print(HER_storage)
             self.replay_buffers[level_i].add_experience(HER_storage[i][0], HER_storage[i][1], HER_storage[i][2], HER_storage[i][3], HER_storage[i][4], HER_storage[i][5], HER_storage[i][6])
         
         return next_state_i, done

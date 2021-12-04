@@ -12,6 +12,7 @@ import torch
 import gym
 import time
 import matplotlib.pyplot as plt
+import pickle
 import gc
 import gym_custom
 from src.HAC import HierarchicalActorCritic
@@ -20,7 +21,7 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 # np.random.seed(int(time.time()))
 # np.random.seed(10)
 
-def plot_success_rate(model_directory, env_name, plotname, episode_to_sucess_rate):
+def plot_success_rate(model_directory, env_name, plotname, pickle_file):
     SMALL_SIZE = 9
     MEDIUM_SIZE = 16
     BIGGER_SIZE = 18
@@ -32,6 +33,9 @@ def plot_success_rate(model_directory, env_name, plotname, episode_to_sucess_rat
     plt.rc('legend', fontsize=20)             # legend fontsize
     plt.rc('figure', titlesize=BIGGER_SIZE)
     plt.rc('font.sans-serif')
+
+    with open(pickle_file, 'rb') as handle:
+        episode_to_sucess_rate = pickle.load(handle)
 
     fig, ax1 = plt.subplots()
     l1 = ax1.plot(episode_to_sucess_rate.keys(), episode_to_sucess_rate.values(), color="tab:red", label="Number of Queries by AIA")[0]
@@ -46,24 +50,25 @@ if __name__=="__main__":
     # Training configuration
     num_episodes_train = 100
     num_episodes_test = 5
-    interval_episode = 2
+    interval_episode = 10
     n_iterations = 100
     batch_size = 100
     discount = 0.95
     learning_rate = 0.001
-    render = True
-    train = False
+    render = False
+    train = True
     test = True
 
     # HAC parameters
-    num_levels = 2   # or 3
+    num_levels = 2  # or 3
     max_horizon = 20     
     subgoal_testing_rate = 0.3
     test_subgoal = False
 
     # Environment parameters
+    env_name = sys.argv[1]
     # env_name = 'MountainCarContinuous-v1'
-    env_name = 'Pendulum-v1'
+    # env_name = 'Pendulum-v1'
     env = gym.make(env_name)
     env_bounds = dict()
     if env_name == 'MountainCarContinuous-v1':
@@ -104,13 +109,15 @@ if __name__=="__main__":
         env_bounds["state_exploration_std"] = np.array([np.deg2rad(10), 0.4]) 
 
     # File paths
-    model_directory = os.getcwd()+"/model/"+env_name
+    model_directory = os.getcwd()+"/model/"+env_name+"/num_levels_"+str(num_levels)
     train_log_file = model_directory+"/train_log.txt"
     test_log_file = model_directory+"/test_log.txt"
     with open(train_log_file, "w+") as f:
         f.write("Episode, Reward, Timesteps, Time taken (s)\n")
     with open(test_log_file, "w+") as f:
         f.write("Episode, Reward, Timesteps, Time taken (s)\n")
+    train_success_rate_pickle = model_directory+"/"+"train_success_rate_pickle.pkl"
+    test_success_rate_pickle = model_directory+"/"+"test_success_rate_pickle.pkl"
 
     # Initialize HAC agent
     hac_agent = HierarchicalActorCritic(num_levels, max_horizon, state_dim, action_dim, subgoal_testing_rate, subgoal_threshold, test_subgoal, render, discount, learning_rate, env_bounds)   
@@ -118,8 +125,8 @@ if __name__=="__main__":
     # Train HAC agent
     gc.collect()
     torch.cuda.empty_cache()
-    epsiode_to_success_rate = dict()
     if train:
+        epsiode_to_success_rate = dict()
         successful_episodes = 0
         start_time = time.time()
         for episode in range(1,num_episodes_train+1):
@@ -138,12 +145,15 @@ if __name__=="__main__":
                 f.write("Episode: {}, Reward: {}, Timesteps: {}, Time taken: {} s\n".format(episode, round(hac_agent.reward,2), hac_agent.timesteps, time_taken))
             print("Episode: {}, Reward: {}, Timesteps: {}, Time taken: {} s".format(episode, round(hac_agent.reward,2), hac_agent.timesteps, time_taken))
             epsiode_to_success_rate[episode] = successful_episodes
+            with open(train_success_rate_pickle, 'wb') as handle:
+                pickle.dump(epsiode_to_success_rate, handle, protocol=pickle.HIGHEST_PROTOCOL)
         print("Success rate:",successful_episodes*100/num_episodes_train)
         env.close()
-        plot_success_rate(model_directory, env_name, "_train.png", epsiode_to_success_rate)
+        plot_success_rate(model_directory, env_name, "_train.png", train_success_rate_pickle)
 
     # Test HAC agent
     if test:
+        epsiode_to_success_rate = dict()
         hac_agent.load_model(model_directory)
         successful_episodes = 0
         start_time = time.time()
@@ -160,6 +170,9 @@ if __name__=="__main__":
             with open(test_log_file, "a+") as f:
                 f.write("Episode: {}, Reward: {}, Timesteps: {}, Time taken: {} s\n".format(episode, round(hac_agent.reward,2), hac_agent.timesteps, time_taken))
             print("Episode: {}, Reward: {}, Timesteps: {}, Time taken: {} s".format(episode, round(hac_agent.reward,2), hac_agent.timesteps, time_taken))
+            epsiode_to_success_rate[episode] = successful_episodes
+            with open(test_success_rate_pickle, 'wb') as handle:
+                pickle.dump(epsiode_to_success_rate, handle, protocol=pickle.HIGHEST_PROTOCOL)
         print("Success rate:",successful_episodes*100/num_episodes_test)
         env.close()
-        plot_success_rate(model_directory, env_name, "_test.png", epsiode_to_success_rate)
+        plot_success_rate(model_directory, env_name, "_test.png", test_success_rate_pickle)
