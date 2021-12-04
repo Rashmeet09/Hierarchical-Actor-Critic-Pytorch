@@ -312,6 +312,15 @@ def make_circle(radius=10, res=30, filled=True):
     else:
         return PolyLine(points, True)
 
+# added/modified from original
+def make_subgoal_circle(length, radius, width=0.00001):
+    l, r, t, b = 0, length, width/2, -width/2
+    box = make_polygon([(l,b), (l,t), (r,t), (r,b)])
+    circ0 = make_circle(width/2)
+    circ1 = make_circle(radius)
+    circ1.add_attr(Transform(translation=(length, 0)))
+    geom = Compound([box, circ0, circ1])
+    return geom
 
 def make_polygon(v, filled=True):
     if filled:

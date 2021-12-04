@@ -46,7 +46,6 @@ class HierarchicalActorCritic():
         if self.is_goal(next_state, goal_state) or done:
             self.goal_reached = True
         self.update_all_actor_critic_networks(n_iterations, batch_size)
-        return self.reward, self.goal_reached, 
 
     def train_level(self, env, level_i, state_i, goal_i, test_subgoal, batch_size):
         # state_i and goal_i are current state and goal for level_i

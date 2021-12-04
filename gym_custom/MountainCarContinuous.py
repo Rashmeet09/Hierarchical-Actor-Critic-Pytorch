@@ -5,7 +5,7 @@ A merge between two sources:
 
 * Adaptation of the MountainCar Environment from the "FAReinforcement" library
 of Jose Antonio Martin H. (version 1.0), adapted by  'Tom Schaul, tom@idsia.ch'
-and then modified by Arnaud de Broissia
+and then modified from original by Arnaud de Broissia
 
 * the OpenAI/gym MountainCar environment
 itself from
@@ -136,7 +136,9 @@ class Continuous_MountainCarEnv(gym.Env):
         carheight = 20
 
         if self.viewer is None:
-            from gym.envs.classic_control import rendering
+            # modified from original
+            # from gym.envs.classic_control import rendering
+            from gym_custom import rendering
 
             self.viewer = rendering.Viewer(screen_width, screen_height)
             xs = np.linspace(self.min_position, self.max_position, 100)
@@ -188,6 +190,7 @@ class Continuous_MountainCarEnv(gym.Env):
 
         return self.viewer.render(return_rgb_array=mode == "rgb_array")
 
+    # added for rendering subgoals
     def render_subgoals(self, subgoal, goal, mode="human"):
         screen_width = 600
         screen_height = 400
@@ -198,7 +201,9 @@ class Continuous_MountainCarEnv(gym.Env):
         carheight = 20
 
         if self.viewer is None:
-            from gym.envs.classic_control import rendering
+            # modified from original
+            # from gym.envs.classic_control import rendering
+            from gym_custom import rendering
 
             self.viewer = rendering.Viewer(screen_width, screen_height)
             xs = np.linspace(self.min_position, self.max_position, 100)
@@ -232,17 +237,21 @@ class Continuous_MountainCarEnv(gym.Env):
             backwheel.set_color(0.5, 0.5, 0.5)
             self.viewer.add_geom(backwheel)
 
+            # modified from original
             # subgoal
             car_subgoal = rendering.FilledPolygon([(l,b), (l,t), (r,t), (r,b)])
-            car_subgoal.set_color(1, 0.2, 0.2)
+            # car_subgoal = rendering.make_circle(radius=12, res=30, filled=True)
+            car_subgoal.set_color(0.0, 0.6, 0.0) # green
             car_subgoal.add_attr(rendering.Transform(translation=(0, clearance)))
             self.cartrans_subgoal = rendering.Transform()
             car_subgoal.add_attr(self.cartrans_subgoal)
             self.viewer.add_geom(car_subgoal)
 
+            # modified from original
             # goal
             car_goal = rendering.FilledPolygon([(l,b), (l,t), (r,t), (r,b)])
-            car_goal.set_color(0.2, 0.2, 1)
+            # car_goal = rendering.make_circle(radius=12, res=30, filled=True)
+            car_goal.set_color(0.3, 0.3, 0.8) # blue
             car_goal.add_attr(rendering.Transform(translation=(0, clearance)))
             self.cartrans_goal = rendering.Transform()
             car_goal.add_attr(self.cartrans_goal)
@@ -266,6 +275,7 @@ class Continuous_MountainCarEnv(gym.Env):
         )
         self.cartrans.set_rotation(math.cos(3 * pos))
 
+        # modified from original
         # subgoal
         pos_subgoal = subgoal[0]
         self.cartrans_subgoal.set_translation(
@@ -273,6 +283,7 @@ class Continuous_MountainCarEnv(gym.Env):
         )
         self.cartrans_subgoal.set_rotation(math.cos(3 * pos_subgoal))
 
+        # modified from original
         # goal
         pos_goal = goal[0]
         self.cartrans_goal.set_translation(
