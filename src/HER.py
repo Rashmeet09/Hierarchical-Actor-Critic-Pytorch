@@ -11,7 +11,7 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 # Transitions sampled from the environment according to the exploration policy are stored in the Replay Buffer.
 class ReplayBuffer():
     def __init__(self):
-        self.max_size = 100000
+        self.max_size = 500000
         self.buffer = deque(maxlen=self.max_size)
 
     def add_experience(self, state, action, reward, next_state, subgoal, discount, done):

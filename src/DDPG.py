@@ -73,7 +73,7 @@ class DDPG(object):
         self.loss_actor = None
         self.loss_critic = None
 
-    def update_actor_critic(self, n_iterations, batch_size, replay_buffer):
+    def update_actor_critic(self, replay_buffer, n_iterations, batch_size):
         for i in range(n_iterations):
             # sample experience from replay buffer
             state, action, reward, next_state, subgoal, discount, done = replay_buffer.sample_experience(batch_size) 
@@ -82,10 +82,10 @@ class DDPG(object):
             Qvalue = self.critic(state, action, subgoal)
 
             # get next action from actor network
-            next_action = self.actor(next_state, subgoal)
+            next_action = self.actor(next_state, subgoal).detach()
 
             # compute target Qvalue using Qvalue for next state and action from critic network
-            next_Qvalue =  self.critic(next_state, next_action, subgoal)
+            next_Qvalue =  self.critic(next_state, next_action, subgoal).detach()
             target_Qvalue = reward + (1 - done) * discount * next_Qvalue
 
             # compute critic network loss and optimize its parameters to minimize the loss

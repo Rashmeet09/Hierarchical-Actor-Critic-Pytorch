@@ -14,24 +14,27 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 class HierarchicalActorCritic():
 
-    def __init__(self, num_levels, max_horizon, state_dim, action_dim, subgoal_testing_rate, subgoal_threshold, test_subgoal, render, discount, learning_rate, env_bounds):
+    def __init__(self, num_levels, max_horizon, state_dim, action_dim, subgoal_testing_rate, subgoal_threshold, render, discount, learning_rate, env_bounds):
+        # initialize parameters
         self.HAC = list()                   # Hierarchical actor critic
         self.replay_buffers = list()        # Hindsight experience replay buffers
-        self.num_levels = num_levels        # number of levels in the hierarchy
-        self.max_horizon = max_horizon      # maximum subgoal horizon
-        self.state_dim = state_dim          # state dimensionality
-        self.action_dim = action_dim        # action dimensionality
-        self.subgoal_testing_rate = subgoal_testing_rate     # subgoal testing rate
-        self.subgoal_threshold = subgoal_threshold           # subgoal achievement threshold
-        self.test_subgoal = test_subgoal
+        self.reward = 0
+        self.timesteps = 0
+        self.subgoals = [None] * num_levels
+        self.goal_reached = False
+        self.test_subgoal = False
+
+        # set parameters
+        self.num_levels = num_levels                        # number of levels in the hierarchy
+        self.max_horizon = max_horizon                      # maximum subgoal horizon
+        self.state_dim = state_dim                          # state dimensionality
+        self.action_dim = action_dim                        # action dimensionality
+        self.subgoal_testing_rate = subgoal_testing_rate    # subgoal testing rate
+        self.subgoal_threshold = subgoal_threshold          # subgoal achievement threshold
         self.render = render
         self.discount = discount
         self.learning_rate = learning_rate
-        self.env_bounds = env_bounds
-        self.reward = 0
-        self.timesteps = 0
-        self.subgoals = [None]*self.num_levels
-        self.goal_reached = False
+        self.env_bounds = env_bounds      
 
         # add layers of the hierarchy in bottom to top fashion
         # initialize experience buffer replay for each level
@@ -41,7 +44,7 @@ class HierarchicalActorCritic():
             self.HAC.append(DDPG(self.state_dim, self.state_dim, self.env_bounds["state_max_bound"], self.env_bounds["state_offset"], self.max_horizon, self.learning_rate))
             self.replay_buffers.append(ReplayBuffer())
 
-    def train(self, env, state, goal_state, n_iterations, batch_size):
+    def execute(self, env, state, goal_state, n_iterations, batch_size):
         next_state, done = self.train_level(env, self.num_levels-1, state, goal_state, self.test_subgoal, batch_size)
         if self.is_goal(next_state, goal_state) or done:
             self.goal_reached = True
@@ -51,8 +54,9 @@ class HierarchicalActorCritic():
         # state_i and goal_i are current state and goal for level_i
         self.subgoals[level_i] = goal_i
         HER_storage = list()
-
         h = 0
+        next_state_i = None
+        done = None
         while h <= self.max_horizon:
 
             # To propose a subgoal action_i, sample action from the policy
@@ -97,19 +101,19 @@ class HierarchicalActorCritic():
                 # subgoal testing transition: tests whether a proposed subgoal can be achieved by the lower level
                 # if subgoal action_i is not achieved by level i-1, level i is penalized with low penalty = - max_horizon
                 if test_subgoal:
-                    self.replay_buffers[level_i].add_experience(state_i, action_i, - self.max_horizon, next_state_i, goal_i, 0.0, done)
+                    self.replay_buffers[level_i].add_experience(state_i, action_i, - self.max_horizon, next_state_i, goal_i, 0.0, float(done))
                 # hindsight action transition (replace the proposed action_i with the subgoal state achieved in hindsight)
                 action_i = next_state_i
             
             # hindsight action transition
             is_goal_achieved = self.is_goal(next_state_i, goal_i)
             if not is_goal_achieved:
-                self.replay_buffers[level_i].add_experience(state_i, action_i, -1.0, next_state_i, goal_i, self.discount, done)
+                self.replay_buffers[level_i].add_experience(state_i, action_i, -1.0, next_state_i, goal_i, self.discount, float(done))
             else:
-                self.replay_buffers[level_i].add_experience(state_i, action_i, 0.0, next_state_i, goal_i, 0.0, done)
+                self.replay_buffers[level_i].add_experience(state_i, action_i, 0.0, next_state_i, goal_i, 0.0, float(done))
 
             # hindsight goal transition
-            HER_storage.append([state_i, action_i, -1.0, next_state_i, None, self.discount, done])
+            HER_storage.append([state_i, action_i, -1.0, next_state_i, None, self.discount, float(done)])
 
             state_i = next_state_i
             h += 1
@@ -129,7 +133,7 @@ class HierarchicalActorCritic():
 
     def update_all_actor_critic_networks(self, n_iterations, batch_size):
         for level_id in range(self.num_levels):
-            self.HAC[level_id].update_actor_critic(n_iterations, batch_size, self.replay_buffers[level_id])
+            self.HAC[level_id].update_actor_critic(self.replay_buffers[level_id], n_iterations, batch_size)
 
     def is_goal(self, next_state, goal):
         is_goal_reached = True

@@ -10,7 +10,14 @@ Innovations of DQN:
 1. the network is trained off-policy with samples from a "replay buffer" to minimize correlations between samples; 
 2. the network is trained with a separate "target Q network" to give consistent targets during temporal difference backups.
 
-References:
+# Use following commands to train and test
+You can modeify the training and testing configuration and the parameters of HAC and DDPG in the main.py file.
+```
+python3 main.py ‘MountainCarContinuous-v1’
+python3 main.py ‘Pendulum-v1’
+```
+
+# References:
 1. [Andrew Levy et. al. 2016](https://arxiv.org/pdf/1712.00948.pdf)
 2. [Andrew Levy et. al. 2018](https://blogs.cuit.columbia.edu/zp2130/files/2019/02/Hierarchical-Actor-Critic.pdf)
 3. [Lilicrap et. al. 2016](https://arxiv.org/pdf/1509.02971v6.pdf)
