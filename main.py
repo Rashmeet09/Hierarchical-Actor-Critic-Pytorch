@@ -46,7 +46,7 @@ def plot_success_rate(model_directory, env_name, plotname, pickle_file):
 
 if __name__=="__main__":
     # Training configuration
-    num_episodes_train = 100
+    num_episodes_train = 200
     num_episodes_test = 5
     interval_episode = 10
     n_iterations = 100
@@ -77,10 +77,10 @@ if __name__=="__main__":
         # action bounds and offset used for normalization
         env_bounds["action_max_bound"] = env.action_space.high[0]
         env_bounds["action_min_array"] = np.array([env.action_space.low[0]])
-        env_bounds["action_max_array"] = np.array([env.action_space.high[0]])  
+        env_bounds["action_max_array"] = np.array([env.action_space.high[0]]) 
         env_bounds["action_offset"] = torch.FloatTensor(np.array([0.0]).reshape(1, -1)).to(device)
         # state bounds and offset used for normalization (values come from the original Open AI Gym's MountainCarContinuous environment)
-        env_bounds["state_max_bound"] = torch.FloatTensor(np.array([0.6, 0.07]).reshape(1, -1)).to(device)
+        env_bounds["state_max_bound"] = torch.FloatTensor(np.array([0.9, 0.07]).reshape(1, -1)).to(device)
         env_bounds["state_min_array"] = np.array([-1.2, -0.07])
         env_bounds["state_max_array"] = np.array([0.6, 0.07])  
         env_bounds["state_offset"] = torch.FloatTensor(np.array([-0.3, 0.0]).reshape(1, -1)).to(device)
@@ -112,7 +112,9 @@ if __name__=="__main__":
     env.seed(random_seed)
 
     # File paths
-    model_directory = os.getcwd()+"/model/"+env_name+"/num_levels_"+str(num_levels)
+    model_directory = os.getcwd()+"/model/"+env_name+"/num_levels_"+str(num_levels)  
+    if not os.path.exists(model_directory):
+        os.makedirs(model_directory)
     train_log_file = model_directory+"/train_log.txt"
     test_log_file = model_directory+"/test_log.txt"
     with open(train_log_file, "w+") as f:
@@ -126,8 +128,6 @@ if __name__=="__main__":
     hac_agent = HierarchicalActorCritic(num_levels, max_horizon, state_dim, action_dim, subgoal_testing_rate, subgoal_threshold, render, discount, learning_rate, env_bounds)   
 
     # Train HAC agent
-    gc.collect()
-    torch.cuda.empty_cache()
     if train:
         epsiode_to_success_rate = dict()
         successful_episodes = 0

@@ -9,7 +9,7 @@ Hindsight Experience Replay (HER) (Andrychowicz et al. 2017).
 import numpy as np
 import torch
 from src.DDPG import DDPG
-from src.HER import ReplayBuffer
+from src.ReplayBuffer import ReplayBuffer
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 class HierarchicalActorCritic():
@@ -46,7 +46,7 @@ class HierarchicalActorCritic():
 
     def execute(self, env, state, goal_state, n_iterations, batch_size):
         next_state, done = self.train_level(env, self.num_levels-1, state, goal_state, self.test_subgoal, batch_size)
-        if self.is_goal(next_state, goal_state) or done:
+        if self.is_goal(next_state, goal_state):
             self.goal_reached = True
         self.update_all_actor_critic_networks(n_iterations, batch_size)
 
