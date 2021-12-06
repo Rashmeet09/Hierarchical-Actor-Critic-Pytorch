@@ -14,7 +14,6 @@ import gym
 import time
 import matplotlib.pyplot as plt
 import pickle
-import gc
 import gym_custom
 from src.HAC import HierarchicalActorCritic
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -46,7 +45,7 @@ def plot_success_rate(model_directory, env_name, plotname, pickle_file):
 
 if __name__=="__main__":
     # Training configuration
-    num_episodes_train = 200
+    num_episodes_train = 100
     num_episodes_test = 5
     interval_episode = 10
     n_iterations = 100
@@ -54,7 +53,7 @@ if __name__=="__main__":
     discount = 0.95
     learning_rate = 0.001
     random_seed = 10         # or int(time.time())
-    render = False
+    render = True
     train = True
     test = True
 
@@ -64,8 +63,8 @@ if __name__=="__main__":
     subgoal_testing_rate = 0.3
 
     # Environment parameters
-    env_name = sys.argv[1]
-    # env_name = 'MountainCarContinuous-v1'
+    # env_name = sys.argv[1]
+    env_name = 'MountainCarContinuous-v1'
     # env_name = 'Pendulum-v1'
     env = gym.make(env_name)
     env_bounds = dict()
