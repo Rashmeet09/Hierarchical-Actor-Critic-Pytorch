@@ -14,242 +14,145 @@ from matplotlib import animation
 import matplotlib.pyplot as plt
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-class HierarchicalActorCritic():
-
-    def __init__(self, num_levels, max_horizon, state_dim, action_dim, subgoal_testing_rate, subgoal_threshold, render, discount, learning_rate, env_bounds):
+class HAC:
+    def __init__(self, num_levels, max_horizon, state_dim, action_dim, render, subgoal_threshold, 
+                 action_bounds, action_offset, state_bounds, state_offset, learning_rate):
         # initialize parameters
-        self.HAC = list()                   # Hierarchical actor critic
-        self.replay_buffers = list()        # Hindsight experience replay buffers
+        self.goals = [None] * num_levels
         self.reward = 0
-        self.timesteps = 0
-        self.subgoals = [None] * num_levels
-        self.goal_reached = False
-        self.test_subgoal = False
+        self.timestep = 0
 
         # set parameters
-        self.num_levels = num_levels                        # number of levels in the hierarchy
-        self.max_horizon = max_horizon                      # maximum subgoal horizon
-        self.state_dim = state_dim                          # state dimensionality
-        self.action_dim = action_dim                        # action dimensionality
-        self.subgoal_testing_rate = subgoal_testing_rate    # subgoal testing rate
-        self.subgoal_threshold = subgoal_threshold          # subgoal achievement threshold
+        self.num_levels = num_levels
+        self.max_horizon = max_horizon
+        self.action_dim = action_dim
+        self.state_dim = state_dim
+        self.subgoal_threshold = subgoal_threshold
         self.render = render
-        self.discount = discount
-        self.learning_rate = learning_rate
-        self.env_bounds = env_bounds  
-        self.frames = list()    
 
         # add layers of the hierarchy in bottom to top fashion
         # initialize experience buffer replay for each level
-        self.HAC.append(DDPG(self.state_dim, self.action_dim, self.env_bounds["action_max_bound"], self.env_bounds["action_offset"], self.max_horizon, self.learning_rate))
-        self.replay_buffers.append(ReplayBuffer())
-        for i in range(1,num_levels):
-            self.HAC.append(DDPG(self.state_dim, self.state_dim, self.env_bounds["state_max_bound"], self.env_bounds["state_offset"], self.max_horizon, self.learning_rate))
-            self.replay_buffers.append(ReplayBuffer())
-
-    def execute(self, env, state, goal_state, n_iterations, batch_size):
-        next_state, done = self.train_level(env, self.num_levels-1, state, goal_state, self.test_subgoal, batch_size)
-        if self.is_goal(next_state, goal_state):
-            self.goal_reached = True
-        self.update_all_actor_critic_networks(n_iterations, batch_size)
-
-    """
-    def train_level(self, env, level_i, state_i, goal_i, test_subgoal, batch_size):
-        # state_i and goal_i are current state and goal for level_i
-        self.subgoals[level_i] = goal_i
-        HER_storage = list()
-        h = 0
-        next_state_i = None
-        done = None
-        while h <= self.max_horizon:
-            is_next_subgoal_test = test_subgoal
-
-            # To propose a subgoal action_i, sample action from the policy
-            action_i = self.HAC[level_i].get_action_from_policy(state_i, goal_i)
-            # If subgoal testing flag is True, the lower level policy is followed exactly, else noise is added for exploration
-            if not test_subgoal:
-                if level_i > 0:
-                    # 20% actions are sampled uniformly at random from the level's action space
-                    # 80% actions are the sum of actions sampled from the levels's policy and gaussian noise
-                    if np.random.random() <= 0.2:
-                        action_i = np.random.uniform(self.env_bounds["state_min_array"], self.env_bounds["state_max_array"])
-                    else:
-                        action_i += np.random.normal(0, self.env_bounds["state_exploration_std"])
-                        action_i = action_i.clip(self.env_bounds["state_min_array"], self.env_bounds["state_max_array"])
-                else:
-                    if np.random.random() <= 0.2:
-                        action_i = np.random.uniform(self.env_bounds["action_min_array"], self.env_bounds["action_max_array"])
-                    else:
-                        action_i += np.random.normal(0, self.env_bounds["action_exploration_std"])
-                        action_i = action_i.clip(self.env_bounds["action_min_array"], self.env_bounds["action_max_array"])
-
-            # If layer_i is not bottom layer, then subgoal action_i is proposed for lower level to achieve
-            # If layer_i is bottom layer, primitive action_i is executed
-            if level_i > 0:
-                # determine whether to test subgoal action_i
-                if np.random.random() < self.subgoal_testing_rate:
-                    is_next_subgoal_test = True
-                # train (lower) level i-1 using subgoal action_i
-                next_state_i, done = self.train_level(env, level_i-1, state_i, action_i, test_subgoal, batch_size)
-            else:
-                next_state_i, reward, done, _ = env.step(action_i)
-                self.timesteps += 1
-                self.reward += reward
-                if self.render:    
-                    if self.num_levels == 1:
-                        env.render()
-                    if self.num_levels == 2:
-                        env.unwrapped.render_subgoals(self.subgoals[0], self.subgoals[1])
-                    if self.num_levels == 3:
-                        env.unwrapped.render_subgoals(self.subgoals[0], self.subgoals[1], self.subgoals[2])
-
-            # when the level_i is not bottom layer and proposed subgoal action_i is not achieved by level i-1
-            if level_i > 0 and not self.is_goal(next_state_i, action_i):
-                # subgoal testing transition: tests whether a proposed subgoal can be achieved by the lower level
-                # if subgoal action_i is not achieved by level i-1, level i is penalized with low penalty = - max_horizon
-                if is_next_subgoal_test:
-                    self.replay_buffers[level_i].add_experience(state_i, action_i, - self.max_horizon, next_state_i, goal_i, 0.0, float(done))
-            
-            # hindsight action transition (replace the proposed action_i with the subgoal state achieved in hindsight)
-            if level_i > 0:
-                action_i = next_state_i
-            
-            # hindsight action transition
-            is_goal_achieved = self.is_goal(next_state_i, goal_i)
-            if not is_goal_achieved:
-                self.replay_buffers[level_i].add_experience(state_i, action_i, -1.0, next_state_i, goal_i, self.discount, float(done))
-            else:
-                self.replay_buffers[level_i].add_experience(state_i, action_i, 0.0, next_state_i, goal_i, 0.0, float(done))
-
-            # hindsight goal transition
-            HER_storage.append([state_i, action_i, -1.0, next_state_i, None, self.discount, float(done)])
-
-            state_i = next_state_i
-            h += 1
-            if is_goal_achieved or done:
-                break
-           
-        # Update the TBD component for the last HER transition
-        # Perform HER using HER_storage_i transitions   
-        for i in range(len(HER_storage)):
-            if i == len(HER_storage)-1:
-                HER_storage[i][2] == 0.0
-                HER_storage[i][5] == 0.0
-            HER_storage[i][4] = next_state_i
-            self.replay_buffers[level_i].add_experience(HER_storage[i][0], HER_storage[i][1], HER_storage[i][2], HER_storage[i][3], HER_storage[i][4], HER_storage[i][5], HER_storage[i][6])
+        self.HAC = [DDPG(state_dim, action_dim, action_bounds, action_offset, learning_rate, max_horizon)]
+        self.replay_buffer = [ReplayBuffer()]
+        for _ in range(num_levels-1):
+            self.HAC.append(DDPG(state_dim, state_dim, state_bounds, state_offset, learning_rate, max_horizon))
+            self.replay_buffer.append(ReplayBuffer())
         
-        return next_state_i, done
-    """
-
-    def train_level(self, env, level_i, state_i, goal_i, test_subgoal, batch_size):
+    def set_parameters(self, lamda, gamma, action_clip_low, action_clip_high, 
+                       state_clip_low, state_clip_high, exploration_action_noise, exploration_state_noise):     
+        self.lamda = lamda
+        self.gamma = gamma
+        self.action_clip_low = action_clip_low
+        self.action_clip_high = action_clip_high
+        self.state_clip_low = state_clip_low
+        self.state_clip_high = state_clip_high
+        self.exploration_action_noise = exploration_action_noise
+        self.exploration_state_noise = exploration_state_noise
+    
+    # Recursively calls itself to train each level of HAC
+    def execute_HAC(self, env, i_level, state, goal, is_subgoal_test):
         # state_i and goal_i are current state and goal for level_i
-        self.subgoals[level_i] = goal_i
-        HER_storage = list()
-        h = 0
-        next_state_i = None
+        HER_storage = []
+        self.goals[i_level] = goal
+        next_state = None
         done = None
-        while h <= self.max_horizon:
-            is_next_subgoal_test = test_subgoal
-
-            # To propose a subgoal action_i, sample action from the policy
-            action_i = self.HAC[level_i].get_action_from_policy(state_i, goal_i)
-            # If subgoal testing flag is True, the lower level policy is followed exactly, else noise is added for exploration
+        for _ in range(self.max_horizon):
+            # if this is a subgoal test, then next/lower level goal has to be a subgoal test
+            is_next_subgoal_test = is_subgoal_test
             
-            if level_i > 0:
-                if not test_subgoal:
+            # To propose a subgoal action_i, sample action from the policy
+            action = self.HAC[i_level].get_action_from_policy(state, goal)
+            # If not bottom-most level
+            if i_level > 0:
+                # if not subgoal testing, take random action or add gaussian noise
+                if not is_subgoal_test:
                     # 20% actions are sampled uniformly at random from the level's action space
                     # 80% actions are the sum of actions sampled from the levels's policy and gaussian noise
-                    if np.random.random() <= 0.2:
-                        action_i = np.random.uniform(self.env_bounds["state_min_array"], self.env_bounds["state_max_array"])
+                    if np.random.random_sample() > 0.2:
+                      action = action + np.random.normal(0, self.exploration_state_noise)
+                      action = action.clip(self.state_clip_low, self.state_clip_high)
                     else:
-                        action_i += np.random.normal(0, self.env_bounds["state_exploration_std"])
-                        action_i = action_i.clip(self.env_bounds["state_min_array"], self.env_bounds["state_max_array"])
+                      action = np.random.uniform(self.state_clip_low, self.state_clip_high)
                 
                 # If layer_i is not bottom layer, then subgoal action_i is proposed for lower level to achieve
                 # If layer_i is bottom layer, primitive action_i is executed
                 # determine whether to test subgoal action_i
-                if np.random.random() < self.subgoal_testing_rate:
+                if np.random.random_sample() < self.lamda:
                     is_next_subgoal_test = True
+                
                 # train (lower) level i-1 using subgoal action_i
-                next_state_i, done = self.train_level(env, level_i-1, state_i, action_i, test_subgoal, batch_size)
-
+                next_state, done = self.execute_HAC(env, i_level-1, state, action, is_next_subgoal_test)
+                
                 # when the level_i is not bottom layer and proposed subgoal action_i is not achieved by level i-1
-                if is_next_subgoal_test and not self.is_goal(next_state_i, action_i):
-                # subgoal testing transition: tests whether a proposed subgoal can be achieved by the lower level
-                # if subgoal action_i is not achieved by level i-1, level i is penalized with low penalty = - max_horizon
-                    self.replay_buffers[level_i].add_experience(state_i, action_i, - self.max_horizon, next_state_i, goal_i, 0.0, float(done))
-            
+                if is_next_subgoal_test and not self.is_goal(action, next_state, self.subgoal_threshold):
+                    # subgoal testing transition: tests whether a proposed subgoal can be achieved by the lower level
+                    # if subgoal action_i is not achieved by level i-1, level i is penalized with low penalty = - max_horizon  
+                    self.replay_buffer[i_level].add((state, action, -self.max_horizon, next_state, goal, 0.0, float(done)))
+                
                 # hindsight action transition (replace the proposed action_i with the subgoal state achieved in hindsight)
-                action_i = next_state_i
-                   
+                action = next_state
+                
+            # Bottom-most level
             else:
-                if not test_subgoal:
-                    if np.random.random() <= 0.2:
-                        action_i = np.random.uniform(self.env_bounds["action_min_array"], self.env_bounds["action_max_array"])
+                if not is_subgoal_test:
+                    if np.random.random_sample() > 0.2:
+                      action = action + np.random.normal(0, self.exploration_action_noise)
+                      action = action.clip(self.action_clip_low, self.action_clip_high)
                     else:
-                        action_i += np.random.normal(0, self.env_bounds["action_exploration_std"])
-                        action_i = action_i.clip(self.env_bounds["action_min_array"], self.env_bounds["action_max_array"])
-
-                next_state_i, reward, done, _ = env.step(action_i)
-                if self.render:    
+                      action = np.random.uniform(self.action_clip_low, self.action_clip_high)
+                
+                # execute primitive action
+                next_state, reward, done, _ = env.step(action)
+                if self.render:
                     if self.num_levels == 1:
-                        self.frames.append(env.render())
+                        env.render()
                     if self.num_levels == 2:
-                        self.frames.append(env.unwrapped.render_subgoals(self.subgoals[0], self.subgoals[1]))
-                    if self.num_levels == 3:
-                        self.frames.append(env.unwrapped.render_subgoals(self.subgoals[0], self.subgoals[1], self.subgoals[2]))
-                    self.save_frames_as_gif(self.frames)
-                self.timesteps += 1
+                        env.unwrapped.render_subgoals(self.goals[0], self.goals[1])   
                 self.reward += reward
-           
+                self.timestep +=1
+            
             # hindsight action transition
-            is_goal_achieved = self.is_goal(next_state_i, goal_i)
-            if not is_goal_achieved:
-                self.replay_buffers[level_i].add_experience(state_i, action_i, -1.0, next_state_i, goal_i, self.discount, float(done))
+            goal_achieved = self.is_goal(next_state, goal, self.subgoal_threshold)
+            if goal_achieved:
+                self.replay_buffer[i_level].add((state, action, 0.0, next_state, goal, 0.0, float(done)))
             else:
-                self.replay_buffers[level_i].add_experience(state_i, action_i, 0.0, next_state_i, goal_i, 0.0, float(done))
-
+                self.replay_buffer[i_level].add((state, action, -1.0, next_state, goal, self.gamma, float(done)))
+                
             # hindsight goal transition
-            HER_storage.append([state_i, action_i, -1.0, next_state_i, None, self.discount, float(done)])
-
-            state_i = next_state_i
-            h += 1
-            if is_goal_achieved or done:
+            HER_storage.append([state, action, -1.0, next_state, None, self.gamma, float(done)])
+            
+            state = next_state    
+            if goal_achieved or done:
                 break
-           
+        
         # Update the TBD component for the last HER transition
         # Perform HER using HER_storage_i transitions   
+        HER_storage[-1][2] = 0.0
+        HER_storage[-1][5] = 0.0
         for i in range(len(HER_storage)):
-            if i == len(HER_storage)-1:
-                HER_storage[i][2] == 0.0
-                HER_storage[i][5] == 0.0
-            HER_storage[i][4] = next_state_i
-            self.replay_buffers[level_i].add_experience(HER_storage[i][0], HER_storage[i][1], HER_storage[i][2], HER_storage[i][3], HER_storage[i][4], HER_storage[i][5], HER_storage[i][6])
+            HER_storage[i][4] = next_state
+            self.replay_buffer[i_level].add(tuple(HER_storage[i]))
         
-        return next_state_i, done
-
-    def update_all_actor_critic_networks(self, n_iterations, batch_size):
-        for level_id in range(self.num_levels):
-            self.HAC[level_id].update_actor_critic(self.replay_buffers[level_id], n_iterations, batch_size)
-
-    def is_goal(self, next_state, goal):
-        is_goal_reached = True
-        for i in range(self.state_dim):
-            if abs(goal[i] - next_state[i]) > self.subgoal_threshold[i]:
-                is_goal_reached = False
-                break
-        return is_goal_reached
+        return next_state, done
     
-    def save_model(self, model_directory):
-        for level_id in range(self.num_levels):
-            torch.save(self.HAC[level_id].actor.state_dict(), '{}/actor_level_{}.pth'.format(model_directory, level_id))
-            torch.save(self.HAC[level_id].critic.state_dict(), '{}/critic_level_{}.pth'.format(model_directory, level_id))
-
-    def load_model(self, model_directory):
-        for level_id in range(self.num_levels):
-            self.HAC[level_id].actor.load_state_dict(torch.load('{}/actor_level_{}.pth'.format(model_directory, level_id)))
-            self.HAC[level_id].critic.load_state_dict(torch.load('{}/critic_level_{}.pth'.format(model_directory, level_id)))
-
+    def update_all_actor_critic_networks(self, n_iter, batch_size):
+        for i in range(self.num_levels):
+            self.HAC[i].update_actor_critic(self.replay_buffer[i], n_iter, batch_size)
+            
+    def is_goal(self, state, goal, subgoal_threshold):
+        for i in range(self.state_dim):
+            if abs(goal[i]-state[i]) > subgoal_threshold[i]:
+                return False
+        return True
+    
+    def save(self, directory, name):
+        for i in range(self.num_levels):
+            self.HAC[i].save(directory, name+'_level_{}'.format(i))
+    
+    def load(self, directory, name):
+        for i in range(self.num_levels):
+            self.HAC[i].load(directory, name+'_level_{}'.format(i))
+    
     def save_frames_as_gif(frames, path='./', filename='gym_animation.gif'):
         # can change frame size here
         plt.figure(figsize=(frames[0].shape[1] / 72.0, frames[0].shape[0] / 72.0), dpi=72)
@@ -262,3 +165,7 @@ class HierarchicalActorCritic():
 
         anim = animation.FuncAnimation(plt.gcf(), animate, frames = len(frames), interval=50)
         anim.save(path + filename, writer='imagemagick', fps=60)
+        
+        
+        
+        

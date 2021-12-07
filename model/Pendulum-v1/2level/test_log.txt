@@ -1,0 +1,11 @@
+Episode, Reward, Timesteps, Time taken (s)
+Episode: 1, Reward: -119.53, Timesteps: 43, Time taken: 2.05 s
+Episode: 2, Reward: -235.77, Timesteps: 62, Time taken: 3.08 s
+Episode: 3, Reward: -124.96, Timesteps: 45, Time taken: 3.83 s
+Episode: 4, Reward: -121.76, Timesteps: 43, Time taken: 4.55 s
+Episode: 5, Reward: -117.98, Timesteps: 43, Time taken: 5.26 s
+Episode: 6, Reward: -349.84, Timesteps: 75, Time taken: 6.51 s
+Episode: 7, Reward: -120.57, Timesteps: 44, Time taken: 7.24 s
+Episode: 8, Reward: -371.54, Timesteps: 63, Time taken: 8.33 s
+Episode: 9, Reward: -367.44, Timesteps: 81, Time taken: 9.68 s
+Episode: 10, Reward: -360.19, Timesteps: 86, Time taken: 11.11 s

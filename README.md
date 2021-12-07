@@ -5,22 +5,24 @@ Hierarchical Actor Critic (HAC) helps agents learn tasks more quickly by enablin
 2. Universal Value Function Approximators (UVFA) (Schaul et al. 2015), and
 3. Hindsight Experience Replay (HER) (Andrychowicz et al. 2017).
 
-Deep Deterministic Policy Gradient (DDPG) is an actor-critic, model-free, off-policy algorithm to learn a policy over continuous action domains. It was proposed by Lillicrap et. al. 2016 after the success of Deep Q Network (DQN) for discrete action domains in Mnih et. al. 2015. DDPG is based on Deep Deterministic Gradient (DPG) actor-critic algorithm proposed by Silver et. al. 2014.
-Innovations of DQN:
-1. the network is trained off-policy with samples from a "replay buffer" to minimize correlations between samples; 
-2. the network is trained with a separate "target Q network" to give consistent targets during temporal difference backups.
+# Use the following commands to train and test
+You can modify the training and testing configuration and the parameters of HAC and DDPG in the main.py file. The parameters have been explained below. You can find the result plots in the Results/ directory. The script install.sh has commands needed to run for installing prerequisite packages.
 
-# Use following commands to train and test
-You can modeify the training and testing configuration and the parameters of HAC and DDPG in the main.py file.
 ```
-python3 main.py ‘MountainCarContinuous-v1’
-python3 main.py ‘Pendulum-v1’
+python3 main.py
 ```
-
-# References:
-1. [Andrew Levy et. al. 2016](https://arxiv.org/pdf/1712.00948.pdf)
-2. [Andrew Levy et. al. 2018](https://blogs.cuit.columbia.edu/zp2130/files/2019/02/Hierarchical-Actor-Critic.pdf)
-3. [Lilicrap et. al. 2016](https://arxiv.org/pdf/1509.02971v6.pdf)
-4. [Tensorflow github by Andrew](https://github.com/andrew-j-levy/Hierarchical-Actor-Critc-HAC-)
-5. [PyTorch github by Nikhil](https://github.com/nikhilbarhate99/Hierarchical-Actor-Critic-HAC-PyTorch/tree/07137e260b89a299e5a3025e11c33f3bcb5e7890)
-6. [Blog by Andrew](http://bigai.cs.brown.edu/2019/09/03/hac.html)
+env_name: "MountainCarContinuous-v1" or "Pendulum-v1"
+num_levels: number of levels in hierarchy
+max_horizon: maximum horizon to achieve subgoal
+subgoal_testing_rate: subgoal testing rate     
+num_episodes_train: maximum number of episodes to train
+num_episodes_test: maximum number of episodes to test  
+interval_episode: interval of episodes to save the models          
+num_iterations: number of iterations            
+batch_size: size of batch          
+learning_rate: rate of learning
+discount: discount rate to use for future rewards             
+random_seed: random seed
+render: flag for rendering/visualizing the environment
+train: flag to train the HAC agent (saves the model)
+test: flag to test the HAC agent (loads the saved model)
